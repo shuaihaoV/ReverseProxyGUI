@@ -1,4 +1,4 @@
-use axum::http::{self, Request, StatusCode, Uri};
+use axum::http::{self, Request, StatusCode};
 use axum::{body::Body, extract::State, response::Response, Router};
 use axum_server::tls_rustls::RustlsConfig;
 use log::{error, info, warn};
@@ -126,52 +126,10 @@ impl ProxyState {
     }
 }
 
-/// 代理请求处理函数
-/// 将客户端请求转发到目标服务器，并重写必要的头部信息
-async fn proxy_handler(
-    State(state): State<ProxyState>,
-    req: Request<Body>,
-) -> Result<Response, (StatusCode, String)> {
-    let (mut parts, body) = req.into_parts();
-
-    let client = state.client.clone();
-    let config = state.config.clone();
-
-    // 记录请求信息
-    info!(
-        "Proxying {} {} for config {}",
-        parts.method, parts.uri, config.name
-    );
-
-    // 构造目标URL
-    let path_query = parts
-        .uri
-        .path_and_query()
-        .map_or("", |v| v.as_str())
-        .to_string();
-    let target_uri = format!("{}{path_query}", config.remote_address);
-
-    let new_uri = Uri::try_from(target_uri.clone()).map_err(|e| {
-        error!("Invalid target URI {target_uri}: {e}");
-        (StatusCode::BAD_REQUEST, format!("Invalid target URI: {e}"))
-    })?;
-
-    // 从 http::Uri 创建 reqwest::Url
-    let new_url = new_uri.to_string().parse::<reqwest::Url>().map_err(|e| {
-        error!("Failed to parse target URL: {e}");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to parse target URL: {e}"),
-        )
-    })?;
-
-    // 重写请求头
-    // 1. 移除原始的 Host 头
-    parts.headers.remove("host");
-
-    // 2. 根据配置设置新的请求头
+/// 重写请求头
+fn rewrite_headers(parts: &mut http::request::Parts, config: &ProxyConfig) {
     if let Ok(remote_url) = url::Url::parse(&config.remote_address) {
-        // 设置 Host 头
+        // 优先使用 remote_host，否则从 remote_address 解析
         let host_value = if !config.remote_host.is_empty() {
             config.remote_host.clone()
         } else if let Some(host) = remote_url.host_str() {
@@ -184,83 +142,91 @@ async fn proxy_handler(
             String::new()
         };
 
+        // 1. 重写 Host 头
+        parts.headers.remove(http::header::HOST);
         if !host_value.is_empty() {
             if let Ok(header_value) = http::HeaderValue::from_str(&host_value) {
                 parts.headers.insert(http::header::HOST, header_value);
             }
         }
 
-        // 重写 Referer 和 Origin 头
-        if config.rewrite_host_headers {
-            if let Some(host) = remote_url.host_str() {
-                let scheme = remote_url.scheme();
-
-                // 重写 Referer
-                if let Some(referer) = parts.headers.get_mut(http::header::REFERER) {
-                    if let Ok(referer_str) = referer.to_str() {
-                        let new_referer = rewrite_url_header(referer_str, host, Some(scheme));
-                        if let Ok(new_value) = http::HeaderValue::from_str(&new_referer) {
-                            *referer = new_value;
+        // 2. 重写 Referer 和 Origin 头
+        if config.rewrite_host_headers && !host_value.is_empty() {
+            let scheme = remote_url.scheme();
+            let mut rewrite = |header_name| {
+                if let Some(header_value) = parts.headers.get_mut(header_name) {
+                    if let Ok(value_str) = header_value.to_str() {
+                        let new_value = rewrite_url_header(value_str, &host_value, Some(scheme));
+                        if let Ok(new_header_value) = http::HeaderValue::from_str(&new_value) {
+                            *header_value = new_header_value;
                         }
                     }
                 }
-
-                // 重写 Origin
-                if let Some(origin) = parts.headers.get_mut(http::header::ORIGIN) {
-                    if let Ok(origin_str) = origin.to_str() {
-                        let new_origin = rewrite_url_header(origin_str, host, Some(scheme));
-                        if let Ok(new_value) = http::HeaderValue::from_str(&new_origin) {
-                            *origin = new_value;
-                        }
-                    }
-                }
-            }
+            };
+            rewrite(http::header::REFERER);
+            rewrite(http::header::ORIGIN);
         }
     }
 
     // 3. 根据配置添加或重写其他请求头
     for header in &config.headers {
-        if !header.key.is_empty() {
-            // 跳过 Host 头，因为它已经被特殊处理了
-            if header.key.to_lowercase() == "host" {
-                continue;
-            }
-
-            match http::HeaderName::from_bytes(header.key.as_bytes()) {
-                Ok(header_name) => match http::HeaderValue::from_str(&header.value) {
-                    Ok(header_value) => {
-                        parts.headers.insert(header_name, header_value);
-                    }
-                    Err(e) => {
-                        warn!("Invalid header value for {}: {e}", header.key);
-                    }
-                },
-                Err(e) => {
-                    warn!("Invalid header name {}: {e}", header.key);
-                }
+        if !header.key.is_empty() && header.key.to_lowercase() != "host" {
+            if let (Ok(header_name), Ok(header_value)) = (
+                http::HeaderName::from_bytes(header.key.as_bytes()),
+                http::HeaderValue::from_str(&header.value),
+            ) {
+                parts.headers.insert(header_name, header_value);
             }
         }
     }
+}
+
+/// 代理请求处理函数
+/// 将客户端请求转发到目标服务器，并重写必要的头部信息
+async fn proxy_handler(
+    State(state): State<ProxyState>,
+    req: Request<Body>,
+) -> Result<Response, (StatusCode, String)> {
+    let (mut parts, body) = req.into_parts();
+    let config = &state.config;
+
+    info!(
+        "Proxying {} {} for config {}",
+        parts.method, parts.uri, config.name
+    );
+
+    // 构造目标URL
+    let path_query = parts.uri.path_and_query().map_or("", |v| v.as_str());
+    let target_uri = format!("{}{}", config.remote_address, path_query);
+
+    let new_url = target_uri.parse::<reqwest::Url>().map_err(|e| {
+        error!("Invalid target URL {target_uri}: {e}");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Invalid target URL: {e}"),
+        )
+    })?;
+
+    // 重写请求头
+    rewrite_headers(&mut parts, config);
 
     // 将 axum 的请求体转换为 reqwest 的请求体（流式）
     let req_body = reqwest::Body::wrap_stream(body.into_data_stream());
 
     info!(
         "Forwarding request to {} with method {}",
-        new_url,
-        parts.method
+        new_url, parts.method
     );
 
-    // 使用 client.request 来构建请求
-    let client_req = client
+    // 发送请求
+    let res = state
+        .client
         .request(parts.method, new_url)
         .headers(parts.headers)
-        .body(req_body);
-
-    // 发送请求
-    let res = match client_req.send().await {
-        Ok(res) => res,
-        Err(e) => {
+        .body(req_body)
+        .send()
+        .await
+        .map_err(|e| {
             error!("Failed to forward request: {e}");
             let status = if e.is_timeout() {
                 StatusCode::GATEWAY_TIMEOUT
@@ -269,9 +235,9 @@ async fn proxy_handler(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            return Err((status, format!("Failed to forward request: {e}")));
-        }
-    };
+            (status, format!("Failed to forward request: {e}"))
+        })?;
+
     info!(
         "Received response with status {} from {}",
         res.status(),
