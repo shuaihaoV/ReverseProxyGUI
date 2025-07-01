@@ -1,0 +1,186 @@
+# Next.js + Tauri 2.0 项目开发规则
+
+你是一位专业的 AI 编程助手，专注于构建现代化的跨平台桌面应用程序。本项目是 **ReverseProxyGUI**，一个使用 Tauri 和 Next.js 构建的反向代理工具。
+如需查阅组件、依赖文档，请使用`context 7`MCP进行查阅。
+
+## 🎯 核心技术栈
+
+你必须熟练掌握并使用以下技术的最新稳定版本：
+- **Next.js 15** with App Router
+- **React 19** 
+- **TypeScript 5**
+- **Tauri 2.0**
+- **Axum** (Rust Web 框架，用于处理代理逻辑)
+- **shadcn/ui** (New York style)
+- **Tailwind CSS 4**
+- **Lucide React** (图标库)
+- **npm** (包管理器, 或 Bun)
+
+## 📁 项目结构规范
+
+### 路径别名使用
+- 使用 `@/` 作为根目录别名
+- 组件: `@/components/` (例如: `proxy-form.tsx`, `app-sidebar.tsx`)
+- UI 组件: `@/components/ui/`
+- 工具函数: `@/lib/` (例如: `proxy-api.ts`)
+- 类型定义: `@/types/` (例如: `proxy.ts`)
+- Hooks: `@/hooks/`
+
+### 目录组织
+```
+app/                 # Next.js App Router 页面 (page.tsx)
+components/          # 可复用业务组件 (proxy-form.tsx)
+├── ui/             # shadcn/ui 组件
+lib/                # 工具函数和配置 (proxy-api.ts)
+src-tauri/          # Tauri Rust 后端
+├── src/            # Rust 源代码
+│   ├── lib.rs      # Tauri 命令定义
+│   └── proxy_manager.rs # Axum 核心代理逻辑
+└── capabilities/   # Tauri 权限配置
+types/              # 核心类型定义 (proxy.ts)
+```
+
+## 🎨 代码风格和结构
+
+### TypeScript 规范
+- 严格模式，启用所有类型检查
+- 优先使用接口 `interface` 而不是类型别名 `type`
+- 为所有函数参数、返回值和变量明确类型注解
+- 使用泛型提高代码复用性
+- 导出类型时使用 `export type` 语法
+
+### React 组件规范
+- 优先使用函数组件和 React Hooks
+- 组件名使用 PascalCase，文件名与组件名保持一致
+- 使用 `React.FC` 或直接函数声明
+- Props 接口命名: `ComponentNameProps`
+- 状态管理优先使用 `useState`, `useReducer`
+- 副作用使用 `useEffect`, `useLayoutEffect`
+
+### 组件结构模板
+```typescript
+interface ComponentNameProps {
+  // props 定义
+}
+
+export function ComponentName({ ...props }: ComponentNameProps) {
+  // hooks
+  // handlers
+  // render
+}
+```
+
+### 命名约定
+- 变量和函数: camelCase
+- 组件: PascalCase  
+- 常量: UPPER_SNAKE_CASE
+- 文件和目录: kebab-case (除组件文件使用 PascalCase)
+- 事件处理函数: `handle` + 动作 (如 `handleClick`, `handleSubmit`)
+
+## 🎯 UI 和样式规范
+
+### shadcn/ui 使用规范
+- 严格按照 shadcn/ui 的 New York 风格
+- 使用 `@/components/ui` 路径导入 UI 组件
+- 自定义组件扩展时保持一致的 API 设计
+- 使用 `cn()` 函数合并 className
+- 支持暗色模式切换
+
+### Tailwind CSS 使用
+- 优先使用 Tailwind 原子类
+- 复杂样式使用 `@apply` 指令
+- 响应式设计: mobile-first 原则
+- 使用 CSS 变量进行主题定制
+- 避免内联样式，使用 Tailwind 类
+
+### 主题和设计规范
+- 支持亮色/暗色模式
+- 使用 `next-themes` 进行主题管理
+- 保持视觉一致性和可访问性
+- 使用 Lucide React 图标库
+
+## ⚡ 性能优化
+
+### React 性能
+- 使用 `React.memo` 包装纯组件
+- 使用 `useMemo`, `useCallback` 优化重渲染
+- 大列表使用虚拟滚动
+- 图片使用 Next.js `Image` 组件
+- 代码分割和懒加载
+
+### Next.js 优化
+- 使用 App Router 和 Server Components
+- 静态生成 (SSG) 优先于服务端渲染 (SSR)
+- 使用 `loading.tsx`, `error.tsx` 处理状态
+- 正确配置 `next.config.ts`
+
+## 🦀 Tauri 开发规范
+
+### Rust 后端
+- 遵循 Rust 编程规范和最佳实践
+- 在 `src-tauri/src/lib.rs` 中使用 `#[tauri::command]` 定义前端调用的函数
+- 核心代理逻辑由 `Axum` 在 `src-tauri/src/proxy_manager.rs` 中处理
+- 错误处理使用 `Result<T, String>` 类型
+- 异步操作使用 `async/await`
+- 合理配置 `tauri.conf.json` 中的权限和安全策略
+
+### 前后端通信
+- 使用 `@/lib/proxy-api.ts` 中封装的函数来调用后端命令
+- 错误处理要完整，包含用户友好的错误信息 (使用 `sonner` toast)
+- 使用 `@/types/proxy.ts` 中的 `ProxyConfig` 类型确保 API 调用的类型安全
+- 避免过度的前后端通信，合理批处理
+
+### 权限管理
+- 最小权限原则，只授予必要的系统权限
+- 在 `capabilities/` 目录下合理配置权限
+- 敏感操作需要用户确认
+
+## 🛠️ 开发工具和脚本
+
+### 开发命令
+- 前端开发: `npm run dev`
+- 桌面应用开发: `npm run tauri dev`  
+- 构建应用: `npm run tauri build`
+- 代码检查: `npm run lint`
+
+### 依赖管理
+- 使用 npm 作为主要包管理器
+- 保持依赖版本的一致性和更新
+- 区分开发依赖和生产依赖
+
+## 📋 代码质量和规范
+
+### ESLint 配置
+- 严格遵循 ESLint 规则
+- 集成 Next.js 和 React 推荐配置
+- 自动修复可修复的问题
+
+### 代码审查要点
+- 类型安全性
+- 性能影响
+- 安全性考虑
+- 可维护性
+- 测试覆盖率
+
+## 🚀 其他重要规则
+
+### 通用开发原则
+- **不要偷懒**: 完整实现用户要求的所有功能特性
+- **代码完整性**: 提供完整、可运行的代码实现
+- **错误处理**: 优雅处理所有可能的错误情况
+- **用户体验**: 注重交互反馈和加载状态
+- **代码注释**: 复杂逻辑必须添加清晰的注释
+
+### 安全考虑
+- 输入验证和数据清理
+- XSS 和 CSRF 防护
+- 敏感数据的安全存储
+- 网络请求的安全配置
+
+### 可访问性
+- 语义化 HTML 结构
+- 键盘导航支持
+- 屏幕阅读器兼容
+- 颜色对比度符合标准
+
+遵循这些规则，确保项目代码质量高、可维护性强、用户体验佳。
