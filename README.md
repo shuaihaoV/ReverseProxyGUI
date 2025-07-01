@@ -1,8 +1,13 @@
 # ReverseProxyGUI
 
-![ReverseProxyGUI Screenshot](https://your-image-host.com/screenshot.png)
+![构建状态](https://github.com/shuaihaoV/ReverseProxyGUI/workflows/release/badge.svg)
+![CI状态](https://github.com/shuaihaoV/ReverseProxyGUI/workflows/ci/badge.svg)
+![License](https://img.shields.io/github/license/shuaihaoV/ReverseProxyGUI)
+![Release](https://img.shields.io/github/v/release/shuaihaoV/ReverseProxyGUI)
 
 一个基于 **Tauri 2.0**, **Next.js 15** 和 **Axum** 构建的现代化、跨平台反向代理桌面应用。它提供了一个直观的图形用户界面，用于轻松创建、管理和监控反向代理配置。
+
+![ReverseProxyGUI Screenshot](./docs/screenshot.png)
 
 ## ✨ 功能特性
 

@@ -17,7 +17,7 @@ export function useProxyStatus(): UseProxyStatusReturn {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshConfigs = useCallback(async (selectId?: string) => {
+  const refreshConfigs = async (selectId?: string) => {
     try {
       setError(null);
       const data = await ProxyAPI.getAllConfigs();
@@ -27,37 +27,32 @@ export function useProxyStatus(): UseProxyStatusReturn {
       setError(errorMessage);
       console.error("Failed to refresh configs:", error);
     } finally {
-      setIsLoading(false);
+      // 仅在首次加载时设置 loading
+      if (isLoading) {
+        setIsLoading(false);
+      }
     }
-  }, []);
+  };
 
-  const startProxy = useCallback(async (configId: string) => {
+  const startProxy = async (configId: string) => {
     await ProxyAPI.startProxy(configId);
     await refreshConfigs();
-  }, [refreshConfigs]);
+  };
 
-  const stopProxy = useCallback(async (configId: string) => {
+  const stopProxy = async (configId: string) => {
     await ProxyAPI.stopProxy(configId);
     await refreshConfigs();
-  }, [refreshConfigs]);
+  };
 
-  const deleteConfig = useCallback(async (configId: string) => {
+  const deleteConfig = async (configId: string) => {
     await ProxyAPI.deleteConfig(configId);
     await refreshConfigs();
-  }, [refreshConfigs]);
+  };
 
   useEffect(() => {
     refreshConfigs();
-  }, [refreshConfigs]);
-
-  // 自动刷新状态（每30秒）
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refreshConfigs();
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [refreshConfigs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     configs,

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import { Toaster, toast } from "sonner";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { toast } from "sonner";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ProxyForm } from "@/components/proxy-form";
@@ -43,6 +43,10 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // 使用 ref 来获取最新的 selectedConfig 值
+  const selectedConfigRef = useRef<ProxyConfig | null>(null);
+  selectedConfigRef.current = selectedConfig;
+
   const refreshConfigs = useCallback(async (selectId?: string) => {
     try {
       setError(null);
@@ -52,9 +56,9 @@ export default function HomePage() {
       let newSelected: ProxyConfig | null = null;
       if (selectId) {
         newSelected = data.find(c => c.id === selectId) || null;
-      } else if (selectedConfig) {
+      } else if (selectedConfigRef.current) {
         // Keep selection if it still exists
-        newSelected = data.find(c => c.id === selectedConfig.id) || null;
+        newSelected = data.find(c => c.id === selectedConfigRef.current!.id) || null;
       }
       setSelectedConfig(newSelected);
 
@@ -65,11 +69,12 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedConfig]);
+  }, []);
 
+  // 初始化时只执行一次，避免重复请求
   useEffect(() => {
     refreshConfigs();
-  }, [refreshConfigs]); // 添加 refreshConfigs 依赖
+  }, [refreshConfigs]);
 
   const handleConfigSelect = useCallback((config: ProxyConfig) => {
     setSelectedConfig(config);
@@ -108,11 +113,14 @@ export default function HomePage() {
     try {
       await ProxyAPI.startProxy(config.id);
       toast.success(`代理 "${config.name}" 启动成功`);
-      await refreshConfigs(config.id);
+      // 延迟刷新，让服务器有时间更新状态
+      setTimeout(() => refreshConfigs(config.id), 500);
     } catch (error) {
       console.error("启动代理失败:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       toast.error(`启动代理失败: ${errorMessage}`);
+      // 失败时也刷新以确保状态同步
+      refreshConfigs(config.id);
     }
   }, [refreshConfigs]);
 
@@ -120,11 +128,14 @@ export default function HomePage() {
     try {
       await ProxyAPI.stopProxy(config.id);
       toast.success(`代理 "${config.name}" 停止成功`);
-      await refreshConfigs(config.id);
+      // 延迟刷新，让服务器有时间更新状态
+      setTimeout(() => refreshConfigs(config.id), 500);
     } catch (error) {
       console.error("停止代理失败:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       toast.error(`停止代理失败: ${errorMessage}`);
+      // 失败时也刷新以确保状态同步
+      refreshConfigs(config.id);
     }
   }, [refreshConfigs]);
 
@@ -137,7 +148,7 @@ export default function HomePage() {
       await ProxyAPI.deleteConfig(config.id);
       toast.success(`代理 "${config.name}" 删除成功`);
       setSelectedConfig(null);
-      await refreshConfigs();
+      refreshConfigs();
     } catch (error) {
       console.error("删除代理失败:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -158,11 +169,11 @@ export default function HomePage() {
       await new Promise(resolve => setTimeout(resolve, 1000));
       await ProxyAPI.startProxy(config.id);
       toast.success(`代理 "${config.name}" 重启成功`);
-      await refreshConfigs(config.id);
+      refreshConfigs(config.id);
     } catch (error) {
       console.error("重启代理失败:", error);
       toast.error(`重启代理失败: ${error instanceof Error ? error.message : String(error)}`);
-      await refreshConfigs(config.id);
+      refreshConfigs(config.id);
     }
   }, [restartDialog.config, refreshConfigs]);
 
@@ -200,7 +211,6 @@ export default function HomePage() {
             </div>
           </SidebarInset>
         </div>
-        <Toaster richColors />
       </SidebarProvider>
     );
   }
@@ -224,7 +234,6 @@ export default function HomePage() {
             </div>
           </SidebarInset>
         </div>
-        <Toaster richColors />
       </SidebarProvider>
     );
   }
@@ -418,7 +427,6 @@ export default function HomePage() {
           </div>
         </SidebarInset>
       </div>
-      <Toaster richColors position="bottom-right" />
 
       <AlertDialog open={restartDialog.open} onOpenChange={(open) => setRestartDialog({ ...restartDialog, open })}>
         <AlertDialogContent>
