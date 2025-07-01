@@ -245,13 +245,20 @@ async fn proxy_handler(
     // 将 axum 的请求体转换为 reqwest 的请求体（流式）
     let req_body = reqwest::Body::wrap_stream(body.into_data_stream());
 
-    // 从 parts 和新的 body 构建 reqwest 请求
-    let mut client_req = reqwest::Request::new(parts.method, new_url);
-    *client_req.headers_mut() = parts.headers;
-    *client_req.body_mut() = Some(req_body);
+    info!(
+        "Forwarding request to {} with method {}",
+        new_url,
+        parts.method
+    );
+
+    // 使用 client.request 来构建请求
+    let client_req = client
+        .request(parts.method, new_url)
+        .headers(parts.headers)
+        .body(req_body);
 
     // 发送请求
-    let res = match client.execute(client_req).await {
+    let res = match client_req.send().await {
         Ok(res) => res,
         Err(e) => {
             error!("Failed to forward request: {e}");
@@ -265,6 +272,11 @@ async fn proxy_handler(
             return Err((status, format!("Failed to forward request: {e}")));
         }
     };
+    info!(
+        "Received response with status {} from {}",
+        res.status(),
+        config.remote_address
+    );
 
     // 准备响应头
     let mut response_builder = Response::builder().status(res.status());
