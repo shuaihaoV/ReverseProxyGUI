@@ -76,7 +76,7 @@ async fn save_config(app: tauri::AppHandle, config: ProxyConfig) -> Result<(), S
         return Err("Config name cannot be empty".to_string());
     }
 
-    if config.listen_port == 0{
+    if config.listen_port == 0 {
         return Err("Invalid port number".to_string());
     }
 
