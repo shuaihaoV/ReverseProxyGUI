@@ -108,15 +108,12 @@ impl ProxyState {
                 match reqwest::Proxy::all(proxy_url) {
                     Ok(proxy) => {
                         client_builder = client_builder.proxy(proxy);
-                        info!(
-                            "Using SOCKS5 proxy for config {}: {}",
-                            config.name, proxy_url
-                        );
+                        info!("Using SOCKS5 proxy for config {}: {proxy_url}", config.name,);
                     }
                     Err(e) => {
                         error!(
-                            "Invalid SOCKS5 proxy URL {} for config {}: {}",
-                            proxy_url, config.name, e
+                            "Invalid SOCKS5 proxy URL {proxy_url} for config {}: {e}",
+                            config.name
                         );
                     }
                 }
@@ -152,22 +149,19 @@ async fn proxy_handler(
         .path_and_query()
         .map_or("", |v| v.as_str())
         .to_string();
-    let target_uri = format!("{}{}", config.remote_address, path_query);
+    let target_uri = format!("{}{path_query}", config.remote_address);
 
     let new_uri = Uri::try_from(target_uri.clone()).map_err(|e| {
-        error!("Invalid target URI {}: {}", target_uri, e);
-        (
-            StatusCode::BAD_REQUEST,
-            format!("Invalid target URI: {}", e),
-        )
+        error!("Invalid target URI {target_uri}: {e}");
+        (StatusCode::BAD_REQUEST, format!("Invalid target URI: {e}"))
     })?;
 
     // 从 http::Uri 创建 reqwest::Url
     let new_url = new_uri.to_string().parse::<reqwest::Url>().map_err(|e| {
-        error!("Failed to parse target URL: {}", e);
+        error!("Failed to parse target URL: {e}");
         (
             StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Failed to parse target URL: {}", e),
+            format!("Failed to parse target URL: {e}"),
         )
     })?;
 
@@ -182,7 +176,7 @@ async fn proxy_handler(
             config.remote_host.clone()
         } else if let Some(host) = remote_url.host_str() {
             if let Some(port) = remote_url.port() {
-                format!("{}:{}", host, port)
+                format!("{host}:{port}")
             } else {
                 host.to_string()
             }
@@ -238,11 +232,11 @@ async fn proxy_handler(
                         parts.headers.insert(header_name, header_value);
                     }
                     Err(e) => {
-                        warn!("Invalid header value for {}: {}", header.key, e);
+                        warn!("Invalid header value for {}: {e}", header.key);
                     }
                 },
                 Err(e) => {
-                    warn!("Invalid header name {}: {}", header.key, e);
+                    warn!("Invalid header name {}: {e}", header.key);
                 }
             }
         }
@@ -260,7 +254,7 @@ async fn proxy_handler(
     let res = match client.execute(client_req).await {
         Ok(res) => res,
         Err(e) => {
-            error!("Failed to forward request: {}", e);
+            error!("Failed to forward request: {e}");
             let status = if e.is_timeout() {
                 StatusCode::GATEWAY_TIMEOUT
             } else if e.is_connect() {
@@ -268,7 +262,7 @@ async fn proxy_handler(
             } else {
                 StatusCode::INTERNAL_SERVER_ERROR
             };
-            return Err((status, format!("Failed to forward request: {}", e)));
+            return Err((status, format!("Failed to forward request: {e}")));
         }
     };
 
@@ -282,7 +276,7 @@ async fn proxy_handler(
 
     // 构建并返回响应
     response_builder.body(res_body).map_err(|e| {
-        error!("Failed to build response: {}", e);
+        error!("Failed to build response: {e}");
         (StatusCode::INTERNAL_SERVER_ERROR, e.to_string())
     })
 }
@@ -293,12 +287,12 @@ fn rewrite_url_header(original_url: &str, target_host: &str, scheme: Option<&str
     if let Ok(url) = url::Url::parse(original_url) {
         let scheme = scheme.unwrap_or(url.scheme());
         let path = url.path();
-        let query = url.query().map(|q| format!("?{}", q)).unwrap_or_default();
-        format!("{}://{}{}{}", scheme, target_host, path, query)
+        let query = url.query().map(|q| format!("?{q}")).unwrap_or_default();
+        format!("{scheme}://{target_host}{path}{query}")
     } else {
         // 如果无法解析URL，返回一个基本的URL
         let scheme = scheme.unwrap_or("http");
-        format!("{}://{}", scheme, target_host)
+        format!("{scheme}://{target_host}")
     }
 }
 
@@ -319,22 +313,24 @@ pub fn generate_self_signed_cert() -> Result<(Vec<u8>, Vec<u8>), ProxyError> {
         vec![
             SanType::DnsName(
                 "localhost".try_into().map_err(|e| {
-                    ProxyError::CertificateError(format!("Invalid DNS name: {:?}", e))
+                    ProxyError::CertificateError(format!("Invalid DNS name: {e:?}"))
                 })?,
             ),
-            SanType::IpAddress("127.0.0.1".parse().map_err(|e| {
-                ProxyError::CertificateError(format!("Invalid IP address: {:?}", e))
-            })?),
+            SanType::IpAddress(
+                "127.0.0.1".parse().map_err(|e| {
+                    ProxyError::CertificateError(format!("Invalid IP address: {e:?}"))
+                })?,
+            ),
             SanType::IpAddress("::1".parse().map_err(|e| {
-                ProxyError::CertificateError(format!("Invalid IPv6 address: {:?}", e))
+                ProxyError::CertificateError(format!("Invalid IPv6 address: {e:?}"))
             })?),
         ];
 
     let key_pair = rcgen::KeyPair::generate()
-        .map_err(|e| ProxyError::CertificateError(format!("Failed to generate key pair: {}", e)))?;
+        .map_err(|e| ProxyError::CertificateError(format!("Failed to generate key pair: {e}")))?;
 
     let cert = params.self_signed(&key_pair).map_err(|e| {
-        ProxyError::CertificateError(format!("Failed to generate certificate: {}", e))
+        ProxyError::CertificateError(format!("Failed to generate certificate: {e}"))
     })?;
 
     let cert_pem = cert.pem().as_bytes().to_vec();
@@ -377,11 +373,11 @@ pub async fn create_proxy_server(
     let listen_addr = format!("{}:{}", config.listen_ip, config.listen_port);
     let addr: SocketAddr = listen_addr
         .parse()
-        .map_err(|e| ProxyError::InvalidAddress(format!("Invalid listen address: {}", e)))?;
+        .map_err(|e| ProxyError::InvalidAddress(format!("Invalid listen address: {e}")))?;
 
     info!(
-        "Starting proxy server on {} -> {}",
-        listen_addr, config.remote_address
+        "Starting proxy server on {listen_addr} -> {}",
+        config.remote_address
     );
 
     // 克隆配置用于任务
@@ -395,7 +391,7 @@ pub async fn create_proxy_server(
             let (cert_pem, key_pem) = match generate_self_signed_cert() {
                 Ok(certs) => certs,
                 Err(e) => {
-                    error!("Failed to generate certificate: {}", e);
+                    error!("Failed to generate certificate: {e}");
                     return;
                 }
             };
@@ -406,12 +402,12 @@ pub async fn create_proxy_server(
             let key_path = temp_dir.join(format!("{}_key.pem", config_clone.id));
 
             if let Err(e) = std::fs::write(&cert_path, cert_pem) {
-                error!("Failed to write cert file: {}", e);
+                error!("Failed to write cert file: {e}");
                 return;
             }
 
             if let Err(e) = std::fs::write(&key_path, key_pem) {
-                error!("Failed to write key file: {}", e);
+                error!("Failed to write key file: {e}");
                 return;
             }
 
@@ -419,7 +415,7 @@ pub async fn create_proxy_server(
             let tls_config = match RustlsConfig::from_pem_file(&cert_path, &key_path).await {
                 Ok(config) => config,
                 Err(e) => {
-                    error!("Failed to create TLS config: {}", e);
+                    error!("Failed to create TLS config: {e}");
                     // 清理临时文件
                     let _ = std::fs::remove_file(cert_path);
                     let _ = std::fs::remove_file(key_path);
@@ -432,7 +428,7 @@ pub async fn create_proxy_server(
                 result = axum_server::bind_rustls(addr, tls_config)
                     .serve(app.into_make_service()) => {
                     if let Err(e) = result {
-                        error!("HTTPS server error: {}", e);
+                        error!("HTTPS server error: {e}");
                     }
                 }
                 _ = shutdown_rx => {
@@ -456,7 +452,7 @@ pub async fn create_proxy_server(
                 result = axum_server::bind(addr)
                     .serve(app.into_make_service()) => {
                     if let Err(e) = result {
-                        error!("HTTP server error: {}", e);
+                        error!("HTTP server error: {e}");
                     }
                 }
                 _ = shutdown_rx => {
@@ -491,8 +487,8 @@ pub async fn stop_proxy_server(instance: ProxyInstance) -> Result<(), ProxyError
             Ok(())
         }
         Ok(Err(e)) => {
-            error!("Proxy server task error: {}", e);
-            Err(ProxyError::StopError(format!("Task error: {}", e)))
+            error!("Proxy server task error: {e}");
+            Err(ProxyError::StopError(format!("Task error: {e}")))
         }
         Err(_) => {
             warn!(
@@ -507,7 +503,7 @@ pub async fn stop_proxy_server(instance: ProxyInstance) -> Result<(), ProxyError
 
 /// 检查端口是否被占用
 pub fn check_port_available(ip: &str, port: u16) -> bool {
-    match format!("{}:{}", ip, port).to_socket_addrs() {
+    match format!("{ip}:{port}").to_socket_addrs() {
         Ok(mut addrs) => {
             if let Some(addr) = addrs.next() {
                 std::net::TcpListener::bind(addr).is_ok()
@@ -523,8 +519,8 @@ pub fn check_port_available(ip: &str, port: u16) -> bool {
 pub async fn start_proxy_helper(manager: ProxyManager, config: ProxyConfig) -> Result<(), String> {
     let listen_addr = format!("{}:{}", config.listen_ip, config.listen_port);
     info!(
-        "Starting proxy server on {} -> {}",
-        listen_addr, config.remote_address
+        "Starting proxy server on {listen_addr} -> {}",
+        config.remote_address
     );
 
     // 检查端口是否被占用
@@ -540,7 +536,7 @@ pub async fn start_proxy_helper(manager: ProxyManager, config: ProxyConfig) -> R
     // 启动代理服务器
     let (shutdown_tx, server_handle) = match create_proxy_server(updated_config.clone()).await {
         Ok(result) => result,
-        Err(e) => return Err(format!("Failed to create proxy server: {}", e)),
+        Err(e) => return Err(format!("Failed to create proxy server: {e}")),
     };
 
     // 将代理实例存储到管理器中

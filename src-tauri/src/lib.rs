@@ -42,8 +42,8 @@ impl From<String> for ErrorResponse {
 #[tauri::command]
 async fn get_all_configs(app: tauri::AppHandle) -> Result<Vec<ProxyConfig>, String> {
     let store = app.store("store.json").map_err(|e| {
-        error!("Failed to open store: {}", e);
-        format!("Failed to open store: {}", e)
+        error!("Failed to open store: {e}");
+        format!("Failed to open store: {e}")
     })?;
 
     match store.get("proxy_configs") {
@@ -55,7 +55,7 @@ async fn get_all_configs(app: tauri::AppHandle) -> Result<Vec<ProxyConfig>, Stri
                     Ok(configs)
                 }
                 Err(e) => {
-                    error!("Failed to deserialize configs: {}", e);
+                    error!("Failed to deserialize configs: {e}");
                     // 如果配置损坏，返回空列表而不是错误
                     warn!("Returning empty config list due to deserialization error");
                     Ok(Vec::new())
@@ -81,17 +81,14 @@ async fn save_config(app: tauri::AppHandle, config: ProxyConfig) -> Result<(), S
     }
 
     let store = app.store("store.json").map_err(|e| {
-        error!("Failed to open store: {}", e);
-        format!("Failed to open store: {}", e)
+        error!("Failed to open store: {e}");
+        format!("Failed to open store: {e}")
     })?;
 
     let mut configs = match store.get("proxy_configs") {
         Some(value) => {
             serde_json::from_value::<Vec<ProxyConfig>>(value.clone()).unwrap_or_else(|e| {
-                error!(
-                    "Failed to deserialize existing configs: {}, starting fresh",
-                    e
-                );
+                error!("Failed to deserialize existing configs: {e}, starting fresh");
                 Vec::new()
             })
         }
@@ -101,23 +98,23 @@ async fn save_config(app: tauri::AppHandle, config: ProxyConfig) -> Result<(), S
     // 检查是否已存在，如果存在则更新，否则添加
     let config_name = config.name.clone();
     if let Some(existing) = configs.iter_mut().find(|c| c.id == config.id) {
-        info!("Updating existing config: {}", config_name);
+        info!("Updating existing config: {config_name}");
         *existing = config;
     } else {
-        info!("Adding new config: {}", config_name);
+        info!("Adding new config: {config_name}");
         configs.push(config);
     }
 
     let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {}", e))?;
+        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store.save().map_err(|e| {
-        error!("Failed to save store: {}", e);
-        format!("Failed to save store: {}", e)
+        error!("Failed to save store: {e}");
+        format!("Failed to save store: {e}")
     })?;
 
-    info!("Config saved successfully: {}", config_name);
+    info!("Config saved successfully: {config_name}");
     Ok(())
 }
 
@@ -127,7 +124,7 @@ async fn delete_config(
     state: State<'_, AppState>,
     config_id: String,
 ) -> Result<(), String> {
-    info!("Deleting config: {}", config_id);
+    info!("Deleting config: {config_id}");
 
     // 先停止代理（如果正在运行）
     {
@@ -142,11 +139,11 @@ async fn delete_config(
     // 从存储中删除配置
     let store = app
         .store("store.json")
-        .map_err(|e| format!("Failed to open store: {}", e))?;
+        .map_err(|e| format!("Failed to open store: {e}"))?;
 
     let mut configs = match store.get("proxy_configs") {
         Some(value) => serde_json::from_value::<Vec<ProxyConfig>>(value.clone())
-            .map_err(|e| format!("Failed to deserialize configs: {}", e))?,
+            .map_err(|e| format!("Failed to deserialize configs: {e}"))?,
         None => return Err("No configs found".to_string()),
     };
 
@@ -154,18 +151,18 @@ async fn delete_config(
     configs.retain(|c| c.id != config_id);
 
     if configs.len() == initial_count {
-        return Err(format!("Config not found: {}", config_id));
+        return Err(format!("Config not found: {config_id}"));
     }
 
     let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {}", e))?;
+        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store
         .save()
-        .map_err(|e| format!("Failed to save store: {}", e))?;
+        .map_err(|e| format!("Failed to save store: {e}"))?;
 
-    info!("Config deleted successfully: {}", config_id);
+    info!("Config deleted successfully: {config_id}");
     Ok(())
 }
 
@@ -175,31 +172,31 @@ async fn start_proxy(
     state: State<'_, AppState>,
     config_id: String,
 ) -> Result<(), String> {
-    info!("Starting proxy: {}", config_id);
+    info!("Starting proxy: {config_id}");
 
     // 检查代理是否已经在运行
     {
         let proxy_manager = state.proxy_manager.read().await;
         if proxy_manager.contains_key(&config_id) {
-            warn!("Proxy already running: {}", config_id);
-            return Err(format!("Proxy already running: {}", config_id));
+            warn!("Proxy already running: {config_id}");
+            return Err(format!("Proxy already running: {config_id}"));
         }
     }
 
     // 获取配置
     let store = app
         .store("store.json")
-        .map_err(|e| format!("Failed to open store: {}", e))?;
+        .map_err(|e| format!("Failed to open store: {e}"))?;
     let configs = match store.get("proxy_configs") {
         Some(value) => serde_json::from_value::<Vec<ProxyConfig>>(value.clone())
-            .map_err(|e| format!("Failed to deserialize configs: {}", e))?,
+            .map_err(|e| format!("Failed to deserialize configs: {e}"))?,
         None => return Err("No configs found".to_string()),
     };
 
     let config = configs
         .iter()
         .find(|c| c.id == config_id)
-        .ok_or_else(|| format!("Config not found: {}", config_id))?
+        .ok_or_else(|| format!("Config not found: {config_id}"))?
         .clone();
 
     // 调用辅助函数来启动代理
@@ -208,10 +205,10 @@ async fn start_proxy(
     // 更新配置状态为运行中
     let store = app
         .store("store.json")
-        .map_err(|e| format!("Failed to open store: {}", e))?;
+        .map_err(|e| format!("Failed to open store: {e}"))?;
     let mut configs = match store.get("proxy_configs") {
         Some(value) => serde_json::from_value::<Vec<ProxyConfig>>(value.clone())
-            .map_err(|e| format!("Failed to deserialize configs: {}", e))?,
+            .map_err(|e| format!("Failed to deserialize configs: {e}"))?,
         None => return Err("No configs found".to_string()),
     };
 
@@ -221,12 +218,12 @@ async fn start_proxy(
     }
 
     let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {}", e))?;
+        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store
         .save()
-        .map_err(|e| format!("Failed to save store: {}", e))?;
+        .map_err(|e| format!("Failed to save store: {e}"))?;
 
     Ok(())
 }
@@ -237,30 +234,30 @@ async fn stop_proxy(
     state: State<'_, AppState>,
     config_id: String,
 ) -> Result<(), String> {
-    info!("Stopping proxy: {}", config_id);
+    info!("Stopping proxy: {config_id}");
 
     // 获取并移除代理实例
     let instance = {
         let mut proxy_manager = state.proxy_manager.write().await;
         proxy_manager.remove(&config_id).ok_or_else(|| {
-            warn!("Proxy not found in manager: {}", config_id);
-            format!("Proxy not found: {}", config_id)
+            warn!("Proxy not found in manager: {config_id}");
+            format!("Proxy not found: {config_id}")
         })?
     };
 
     // 停止代理服务器
     stop_proxy_server(instance).await.map_err(|e| {
-        error!("Failed to stop proxy server: {}", e);
-        format!("Failed to stop proxy: {}", e)
+        error!("Failed to stop proxy server: {e}");
+        format!("Failed to stop proxy: {e}")
     })?;
 
     // 更新配置状态
     let store = app
         .store("store.json")
-        .map_err(|e| format!("Failed to open store: {}", e))?;
+        .map_err(|e| format!("Failed to open store: {e}"))?;
     let mut configs = match store.get("proxy_configs") {
         Some(value) => serde_json::from_value::<Vec<ProxyConfig>>(value.clone())
-            .map_err(|e| format!("Failed to deserialize configs: {}", e))?,
+            .map_err(|e| format!("Failed to deserialize configs: {e}"))?,
         None => return Err("No configs found".to_string()),
     };
 
@@ -270,12 +267,12 @@ async fn stop_proxy(
     }
 
     let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {}", e))?;
+        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store
         .save()
-        .map_err(|e| format!("Failed to save store: {}", e))?;
+        .map_err(|e| format!("Failed to save store: {e}"))?;
 
     Ok(())
 }
@@ -306,11 +303,11 @@ async fn shutdown_all_proxies(proxy_manager: ProxyManager) {
     let proxy_count = manager.len();
 
     if proxy_count > 0 {
-        info!("Stopping {} running proxies", proxy_count);
+        info!("Stopping {proxy_count} running proxies");
         for (id, instance) in manager.drain() {
-            info!("Stopping proxy {} on app exit", id);
+            info!("Stopping proxy {id} on app exit");
             if let Err(e) = stop_proxy_server(instance).await {
-                error!("Failed to stop proxy {}: {}", id, e);
+                error!("Failed to stop proxy {id}: {e}");
             }
         }
         info!("All proxies stopped");
@@ -341,8 +338,8 @@ pub fn run() {
 
             // 获取 store
             let store = app.store("store.json").map_err(|e| {
-                error!("Failed to open store during setup: {}", e);
-                format!("Failed to open store: {}", e)
+                error!("Failed to open store during setup: {e}");
+                format!("Failed to open store: {e}")
             })?;
 
             // 启动时重置所有代理的运行状态
@@ -357,14 +354,14 @@ pub fn run() {
                             }
                         }
                         let updated_value = serde_json::to_value(&configs)
-                            .map_err(|e| format!("Failed to serialize configs: {}", e))?;
+                            .map_err(|e| format!("Failed to serialize configs: {e}"))?;
                         store.set("proxy_configs", updated_value);
                         store
                             .save()
-                            .map_err(|e| format!("Failed to save store: {}", e))?;
+                            .map_err(|e| format!("Failed to save store: {e}"))?;
                     }
                     Err(e) => {
-                        error!("Failed to deserialize configs during setup: {}", e);
+                        error!("Failed to deserialize configs during setup: {e}");
                         // 如果反序列化失败，则创建一个空的配置列表
                         store.set(
                             "proxy_configs",
@@ -372,7 +369,7 @@ pub fn run() {
                         );
                         store
                             .save()
-                            .map_err(|e| format!("Failed to save store: {}", e))?;
+                            .map_err(|e| format!("Failed to save store: {e}"))?;
                     }
                 }
             } else {
@@ -384,7 +381,7 @@ pub fn run() {
                 );
                 store
                     .save()
-                    .map_err(|e| format!("Failed to save store: {}", e))?;
+                    .map_err(|e| format!("Failed to save store: {e}"))?;
             }
 
             info!("Application setup completed successfully");
