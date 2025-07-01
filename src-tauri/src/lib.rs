@@ -105,8 +105,8 @@ async fn save_config(app: tauri::AppHandle, config: ProxyConfig) -> Result<(), S
         configs.push(config);
     }
 
-    let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
+    let value =
+        serde_json::to_value(&configs).map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store.save().map_err(|e| {
@@ -154,8 +154,8 @@ async fn delete_config(
         return Err(format!("Config not found: {config_id}"));
     }
 
-    let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
+    let value =
+        serde_json::to_value(&configs).map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store
@@ -217,8 +217,8 @@ async fn start_proxy(
         info!("Updated config status to running: {}", config.name);
     }
 
-    let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
+    let value =
+        serde_json::to_value(&configs).map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store
@@ -266,8 +266,8 @@ async fn stop_proxy(
         info!("Updated config status to stopped: {}", config.name);
     }
 
-    let value = serde_json::to_value(&configs)
-        .map_err(|e| format!("Failed to serialize configs: {e}"))?;
+    let value =
+        serde_json::to_value(&configs).map_err(|e| format!("Failed to serialize configs: {e}"))?;
 
     store.set("proxy_configs", value);
     store
